@@ -575,14 +575,139 @@ const DLAStep = () => {
   );
 };
 
+// Linear Regression Graph Canvas
+const RegressionGraphCanvas = ({
+  sizes,
+  counts,
+  width = 350,
+  height = 280,
+}: {
+  sizes: number[];
+  counts: number[];
+  width?: number;
+  height?: number;
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const padding = 50;
+    const graphWidth = width - padding * 2;
+    const graphHeight = height - padding * 2;
+
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, width, height);
+
+    const points = sizes.map((s, i) => ({
+      x: Math.log(1 / s),
+      y: Math.log(counts[i]),
+    }));
+
+    if (points.length < 2) return;
+
+    const xMin = Math.min(...points.map((p) => p.x));
+    const xMax = Math.max(...points.map((p) => p.x));
+    const yMin = Math.min(...points.map((p) => p.y));
+    const yMax = Math.max(...points.map((p) => p.y));
+
+    const { slope, intercept } = linearRegression(points);
+
+    const toCanvasX = (x: number) => padding + ((x - xMin) / (xMax - xMin)) * graphWidth;
+    const toCanvasY = (y: number) => height - padding - ((y - yMin) / (yMax - yMin)) * graphHeight;
+
+    ctx.strokeStyle = '#374151';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 5; i++) {
+      const y = padding + (i * graphHeight) / 5;
+      ctx.beginPath();
+      ctx.moveTo(padding, y);
+      ctx.lineTo(width - padding, y);
+      ctx.stroke();
+
+      const yVal = yMax - (i * (yMax - yMin)) / 5;
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '11px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(yVal.toFixed(2), padding - 8, y + 4);
+    }
+
+    for (let i = 0; i <= 5; i++) {
+      const x = padding + (i * graphWidth) / 5;
+      ctx.beginPath();
+      ctx.moveTo(x, padding);
+      ctx.lineTo(x, height - padding);
+      ctx.stroke();
+
+      const xVal = xMin + (i * (xMax - xMin)) / 5;
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(xVal.toFixed(2), x, height - padding + 16);
+    }
+
+    // Regression line
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    const lineX1 = xMin;
+    const lineY1 = slope * lineX1 + intercept;
+    const lineX2 = xMax;
+    const lineY2 = slope * lineX2 + intercept;
+    ctx.beginPath();
+    ctx.moveTo(toCanvasX(lineX1), toCanvasY(lineY1));
+    ctx.lineTo(toCanvasX(lineX2), toCanvasY(lineY2));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Data points
+    points.forEach((p, idx) => {
+      const cx = toCanvasX(p.x);
+      const cy = toCanvasY(p.y);
+
+      ctx.fillStyle = '#22d3ee';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#0891b2';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('ln(1/ε)', width / 2, height - 8);
+
+    ctx.save();
+    ctx.translate(12, height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('ln N(ε)', 0, 0);
+    ctx.restore();
+
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText(`D = ${slope.toFixed(4)}`, width - padding - 50, padding - 10);
+  }, [sizes, counts, width, height]);
+
+  return <canvas ref={canvasRef} width={width} height={height} className="rounded-lg shadow-xl" />;
+};
+
 const BoxCountingStep = () => {
   const { grid, isRunning, particleCount, setIsRunning, reset } = useDLASimulation();
   const [boxSize, setBoxSize] = useState(8);
   const [fractalDim, setFractalDim] = useState<number | null>(null);
+  const [boxData, setBoxData] = useState<{ sizes: number[]; counts: number[] }>({ sizes: [], counts: [] });
 
   useEffect(() => {
     if (particleCount > 50) {
       const { sizes, counts } = calculateBoxCounting(grid);
+      setBoxData({ sizes, counts });
       if (sizes.length > 2) {
         const points = sizes.map((s, i) => ({
           x: Math.log(1 / s),
@@ -600,19 +725,17 @@ const BoxCountingStep = () => {
   }, [setIsRunning]);
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold text-white mb-4">박스 카운팅 차원 계산</h2>
-        <p className="text-gray-400">격자 크기를 변화시키며 입자가 포함된 박스 수를 계산</p>
+        <p className="text-gray-400">격자 크기를 변화시키며 입자가 포함된 박스 수를 계산하고 선형 회귀 분석으로 차원 도출</p>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-8 mb-6">
+      <div className="grid lg:grid-cols-3 gap-6 mb-6">
         <div>
           <BoxCountingCanvas grid={grid} boxSize={boxSize} width={350} />
-        </div>
-        <div className="flex flex-col justify-center">
-          <div className="bg-gray-800/80 rounded-xl p-6 mb-4">
-            <h3 className="text-lg font-semibold text-white mb-4">박스 크기 조절</h3>
+          <div className="bg-gray-800/80 rounded-xl p-4 mt-4">
+            <h3 className="text-sm font-semibold text-white mb-3">박스 크기 조절</h3>
             <input
               type="range"
               min="2"
@@ -622,11 +745,21 @@ const BoxCountingStep = () => {
               onChange={(e) => setBoxSize(Number(e.target.value))}
               className="w-full accent-cyan-500"
             />
-            <p className="text-center text-cyan-400 mt-2 font-mono">ε = {boxSize}</p>
+            <p className="text-center text-cyan-400 mt-2 font-mono text-sm">ε = {boxSize}</p>
           </div>
+        </div>
 
-          <div className="bg-gray-800/80 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-white mb-2">계산된 프랙탈 차원</h3>
+        <div className="flex flex-col">
+          <div className="bg-gray-800/80 rounded-xl p-4 mb-4">
+            <h3 className="text-sm font-semibold text-white mb-2">선형 회귀 분석 그래프</h3>
+            <p className="text-gray-400 text-xs">ln N(ε) = D × ln(1/ε) + C</p>
+          </div>
+          <RegressionGraphCanvas sizes={boxData.sizes} counts={boxData.counts} width={350} height={280} />
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <div className="bg-gradient-to-br from-cyan-900/40 to-cyan-800/20 rounded-xl p-6 border border-cyan-700/30">
+            <h3 className="text-lg font-semibold text-white mb-3">계산된 프랙탈 차원</h3>
             {fractalDim ? (
               <p className="text-4xl font-bold text-cyan-400 text-center font-mono">
                 D ≈ {fractalDim.toFixed(3)}
@@ -634,8 +767,29 @@ const BoxCountingStep = () => {
             ) : (
               <p className="text-gray-500 text-center">시뮬레이션 진행 중...</p>
             )}
-            <p className="text-gray-400 text-sm text-center mt-2">
-              이론값: D ≈ 1.71
+            <p className="text-gray-400 text-sm text-center mt-2">이론값: D ≈ 1.71</p>
+          </div>
+
+          <div className="bg-gray-800/80 rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-white mb-3">박스 카운팅 데이터</h3>
+            <div className="space-y-2 text-xs font-mono">
+              {boxData.sizes.map((size, idx) => (
+                <div key={size} className="flex justify-between text-gray-400">
+                  <span>ε = {size.toString().padStart(2)}</span>
+                  <span>N(ε) = {boxData.counts[idx]}</span>
+                  <span className="text-cyan-400">
+                    ln N / ln(1/ε) ≈ {(Math.log(boxData.counts[idx]) / Math.log(1 / size)).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-xl p-4 border border-amber-700/30">
+            <h3 className="text-sm font-semibold text-amber-400 mb-2">최소제곱법 원리</h3>
+            <p className="text-gray-400 text-xs leading-relaxed">
+              데이터 점들과 직선 사이의 오차 제곱합을 최소화하는 최적의 기울기를 찾습니다.
+              이 기울기가 바로 프랙탈 차원입니다.
             </p>
           </div>
         </div>
@@ -657,6 +811,7 @@ const BoxCountingStep = () => {
           onClick={() => {
             reset();
             setFractalDim(null);
+            setBoxData({ sizes: [], counts: [] });
           }}
           className="flex items-center gap-2 px-6 py-3 rounded-lg bg-gray-600 hover:bg-gray-700 text-white font-medium transition-all"
         >
