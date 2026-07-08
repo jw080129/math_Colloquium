@@ -632,26 +632,41 @@ const RegressionGraphCanvas = ({
   return <canvas ref={canvasRef} width={width} height={height} className="rounded-lg shadow-xl" />;
 };
 
+const BOX_SIZES = [2, 4, 8, 16, 32] as const;
+
 const BoxCountingStep = () => {
   const { grid, isRunning, particleCount, setIsRunning, reset } = useDLASimulation();
-  const [boxSize, setBoxSize] = useState(8);
+  const [boxSize, setBoxSize] = useState<number>(8);
   const [fractalDim, setFractalDim] = useState<number | null>(null);
   const [boxData, setBoxData] = useState<{ sizes: number[]; counts: number[] }>({ sizes: [], counts: [] });
+  const [filteredData, setFilteredData] = useState<{ sizes: number[]; counts: number[] }>({ sizes: [], counts: [] });
 
   useEffect(() => {
     if (particleCount > 50) {
       const { sizes, counts } = calculateBoxCounting(grid);
       setBoxData({ sizes, counts });
-      if (sizes.length > 2) {
-        const points = sizes.map((s, i) => ({
-          x: Math.log(1 / s),
-          y: Math.log(counts[i]),
-        }));
-        const { slope } = linearRegression(points);
-        setFractalDim(slope);
-      }
     }
   }, [grid, particleCount]);
+
+  useEffect(() => {
+    if (boxData.sizes.length === 0) return;
+
+    const maxIndex = boxData.sizes.findIndex((s) => s === boxSize);
+    if (maxIndex === -1) return;
+
+    const filteredSizes = boxData.sizes.slice(0, maxIndex + 1);
+    const filteredCounts = boxData.counts.slice(0, maxIndex + 1);
+    setFilteredData({ sizes: filteredSizes, counts: filteredCounts });
+
+    if (filteredSizes.length >= 2) {
+      const points = filteredSizes.map((s, i) => ({
+        x: Math.log(1 / s),
+        y: Math.log(filteredCounts[i]),
+      }));
+      const { slope } = linearRegression(points);
+      setFractalDim(slope);
+    }
+  }, [boxData, boxSize]);
 
   useEffect(() => {
     setIsRunning(true);
@@ -669,17 +684,25 @@ const BoxCountingStep = () => {
         <div>
           <BoxCountingCanvas grid={grid} boxSize={boxSize} width={350} />
           <div className="bg-gray-800/80 rounded-xl p-4 mt-4">
-            <h3 className="text-sm font-semibold text-white mb-3">박스 크기 조절</h3>
-            <input
-              type="range"
-              min="2"
-              max="32"
-              step="1"
-              value={boxSize}
-              onChange={(e) => setBoxSize(Number(e.target.value))}
-              className="w-full accent-cyan-500"
-            />
-            <p className="text-center text-cyan-400 mt-2 font-mono text-sm">ε = {boxSize}</p>
+            <h3 className="text-sm font-semibold text-white mb-3">박스 크기 선택</h3>
+            <div className="flex gap-2 flex-wrap">
+              {BOX_SIZES.map((size) => (
+                <button
+                  key={size}
+                  onClick={() => setBoxSize(size)}
+                  className={`px-4 py-2 rounded-lg font-mono text-sm font-medium transition-all ${
+                    boxSize === size
+                      ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-500/30'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  ε = {size}
+                </button>
+              ))}
+            </div>
+            <p className="text-gray-400 text-xs mt-3 text-center">
+              선택한 크기까지의 데이터로 회귀 분석
+            </p>
           </div>
         </div>
 
@@ -688,7 +711,7 @@ const BoxCountingStep = () => {
             <h3 className="text-sm font-semibold text-white mb-2">선형 회귀 분석 그래프</h3>
             <p className="text-gray-400 text-xs">ln N(ε) = D × ln(1/ε) + C</p>
           </div>
-          <RegressionGraphCanvas sizes={boxData.sizes} counts={boxData.counts} width={350} height={280} />
+          <RegressionGraphCanvas sizes={filteredData.sizes} counts={filteredData.counts} width={350} height={280} />
         </div>
 
         <div className="flex flex-col gap-4">
@@ -702,20 +725,27 @@ const BoxCountingStep = () => {
               <p className="text-gray-500 text-center">시뮬레이션 진행 중...</p>
             )}
             <p className="text-gray-400 text-sm text-center mt-2">이론값: D ≈ 1.71</p>
+            <p className="text-gray-500 text-xs text-center mt-1">데이터 포인트: {filteredData.sizes.length}개</p>
           </div>
 
           <div className="bg-gray-800/80 rounded-xl p-4">
             <h3 className="text-sm font-semibold text-white mb-3">박스 카운팅 데이터</h3>
             <div className="space-y-2 text-xs font-mono">
-              {boxData.sizes.map((size, idx) => (
-                <div key={size} className="flex justify-between text-gray-400">
-                  <span>ε = {size.toString().padStart(2)}</span>
-                  <span>N(ε) = {boxData.counts[idx]}</span>
-                  <span className="text-cyan-400">
-                    ln N / ln(1/ε) ≈ {(Math.log(boxData.counts[idx]) / Math.log(1 / size)).toFixed(2)}
-                  </span>
-                </div>
-              ))}
+              {boxData.sizes.map((size, idx) => {
+                const isIncluded = size <= boxSize;
+                return (
+                  <div
+                    key={size}
+                    className={`flex justify-between ${isIncluded ? 'text-gray-300' : 'text-gray-600'}`}
+                  >
+                    <span className={isIncluded ? 'text-cyan-400' : ''}>ε = {size.toString().padStart(2)}</span>
+                    <span>N(ε) = {boxData.counts[idx]}</span>
+                    <span className={isIncluded ? 'text-cyan-400' : 'text-gray-600'}>
+                      {(Math.log(boxData.counts[idx]) / Math.log(1 / size)).toFixed(2)}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -738,6 +768,7 @@ const BoxCountingStep = () => {
             reset();
             setFractalDim(null);
             setBoxData({ sizes: [], counts: [] });
+            setFilteredData({ sizes: [], counts: [] });
           }}
           className="flex items-center gap-2 px-6 py-3 rounded-lg bg-gray-600 hover:bg-gray-700 text-white font-medium transition-all"
         >
