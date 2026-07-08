@@ -9,7 +9,6 @@ import {
   Box,
   Layers,
   BarChart3,
-  Sparkles,
 } from 'lucide-react';
 
 // Types
@@ -28,30 +27,24 @@ const CENTER = Math.floor(GRID_SIZE / 2);
 const STEPS = [
   {
     id: 0,
-    title: '개념 정의',
-    subtitle: 'Concept Definition',
-    icon: Sparkles,
-  },
-  {
-    id: 1,
     title: '무작위 걸음',
     subtitle: 'Random Walk',
     icon: Activity,
   },
   {
-    id: 2,
+    id: 1,
     title: 'DLA 응집',
     subtitle: 'Diffusion-Limited Aggregation',
     icon: Layers,
   },
   {
-    id: 3,
+    id: 2,
     title: '박스 카운팅',
     subtitle: 'Box Counting Dimension',
     icon: Box,
   },
   {
-    id: 4,
+    id: 3,
     title: '공간 충전 분석',
     subtitle: 'Spatial Filling Efficiency',
     icon: BarChart3,
@@ -345,65 +338,6 @@ const BoxCountingCanvas = ({
 };
 
 // Step Components
-const ConceptStep = () => (
-  <div className="max-w-4xl mx-auto space-y-8">
-    <div className="text-center mb-12">
-      <h2 className="text-3xl font-bold text-white mb-4">핵심 개념 정의</h2>
-      <p className="text-gray-400">Core Mathematical Concepts</p>
-    </div>
-
-    <div className="grid md:grid-cols-2 gap-6">
-      <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-xl p-6 border border-cyan-700/30">
-        <h3 className="text-xl font-semibold text-cyan-400 mb-3">하우스도르프 차원</h3>
-        <p className="text-gray-300 mb-3">Hausdorff Dimension</p>
-        <p className="text-gray-400 text-sm leading-relaxed">
-          유클리드 기하학의 정수 차원(1, 2, 3차원)을 넘어 소수점 차원을 정의하는 해석학적 개념.
-          프랙탈 구조의 복잡도를 정량화할 수 있다.
-        </p>
-        <div className="mt-4 p-3 bg-cyan-950/50 rounded-lg">
-          <code className="text-cyan-300 text-sm">D = lim[ln N(ε)] / ln(1/ε)</code>
-        </div>
-      </div>
-
-      <div className="bg-gradient-to-br from-purple-900/30 to-purple-800/10 rounded-xl p-6 border border-purple-700/30">
-        <h3 className="text-xl font-semibold text-purple-400 mb-3">무작위 걸음</h3>
-        <p className="text-gray-300 mb-3">Random Walk</p>
-        <p className="text-gray-400 text-sm leading-relaxed">
-          입자가 이전의 움직임과 독립적으로, 매 순간 확률적인 방향으로 이동하는 격자 모델.
-          브라운 운동의 이산적 표현이다.
-        </p>
-        <div className="mt-4 p-3 bg-purple-950/50 rounded-lg">
-          <code className="text-purple-300 text-sm">P(방향) = 1/4 (동, 서, 남, 북)</code>
-        </div>
-      </div>
-
-      <div className="bg-gradient-to-br from-orange-900/30 to-orange-800/10 rounded-xl p-6 border border-orange-700/30">
-        <h3 className="text-xl font-semibold text-orange-400 mb-3">확산 제한 응집</h3>
-        <p className="text-gray-300 mb-3">Diffusion-Limited Aggregation (DLA)</p>
-        <p className="text-gray-400 text-sm leading-relaxed">
-          브라운 운동을 하며 떠돌던 입자들이 중심핵에 와서 부딪히는 순간 결합하며
-          거친 가지 구조를 형성하는 알고리즘 모델.
-        </p>
-        <div className="mt-4 p-3 bg-orange-950/50 rounded-lg">
-          <code className="text-orange-300 text-sm">DLA 차원 ≈ 1.71 (2D)</code>
-        </div>
-      </div>
-
-      <div className="bg-gradient-to-br from-green-900/30 to-green-800/10 rounded-xl p-6 border border-green-700/30">
-        <h3 className="text-xl font-semibold text-green-400 mb-3">공간 충전 효율</h3>
-        <p className="text-gray-300 mb-3">Spatial Filling Efficiency</p>
-        <p className="text-gray-400 text-sm leading-relaxed">
-          응집체가 공간을 얼마나 빽빽하게 채우고 있는지를 나타내는 지표.
-          차원이 낮을수록 공간을 엉성하게 점유한다.
-        </p>
-        <div className="mt-4 p-3 bg-green-950/50 rounded-lg">
-          <code className="text-green-300 text-sm">낮은 차원 = 높은 표면적/부피 비율</code>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
 const RandomWalkStep = () => {
   const [particles, setParticles] = useState<Point[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -784,14 +718,6 @@ const BoxCountingStep = () => {
               ))}
             </div>
           </div>
-
-          <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-xl p-4 border border-amber-700/30">
-            <h3 className="text-sm font-semibold text-amber-400 mb-2">최소제곱법 원리</h3>
-            <p className="text-gray-400 text-xs leading-relaxed">
-              데이터 점들과 직선 사이의 오차 제곱합을 최소화하는 최적의 기울기를 찾습니다.
-              이 기울기가 바로 프랙탈 차원입니다.
-            </p>
-          </div>
         </div>
       </div>
 
@@ -935,14 +861,12 @@ function App() {
   const renderStep = () => {
     switch (currentStep) {
       case 0:
-        return <ConceptStep />;
-      case 1:
         return <RandomWalkStep />;
-      case 2:
+      case 1:
         return <DLAStep />;
-      case 3:
+      case 2:
         return <BoxCountingStep />;
-      case 4:
+      case 3:
         return <SpatialFillingStep />;
       default:
         return null;
