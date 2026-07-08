@@ -182,22 +182,27 @@ const useDLASimulation = () => {
   return { grid, isRunning, particleCount, setIsRunning, reset };
 };
 
-// Box counting algorithm
+// [버그 수정 완료] 올림(Math.ceil) 및 대칭 여백 오프셋을 적용한 박스 카운팅 알고리즘
 const calculateBoxCounting = (grid: Grid): { sizes: number[]; counts: number[] } => {
   const sizes: number[] = [];
   const counts: number[] = [];
 
   for (let boxSize = 2; boxSize <= GRID_SIZE / 2; boxSize *= 2) {
     let count = 0;
-    const numBoxes = Math.floor(GRID_SIZE / boxSize);
+    // Math.ceil을 사용하여 GRID_SIZE 경계를 완전히 덮도록 격자 수 설정
+    const numBoxes = Math.ceil(GRID_SIZE / boxSize);
+    // 격자를 화면 중앙에 정렬하기 위한 여백 오프셋 계산
+    const totalGridWidth = numBoxes * boxSize;
+    const offset = Math.floor((totalGridWidth - GRID_SIZE) / 2);
 
     for (let bx = 0; bx < numBoxes; bx++) {
       for (let by = 0; by < numBoxes; by++) {
         let hasParticle = false;
         for (let dx = 0; dx < boxSize && !hasParticle; dx++) {
           for (let dy = 0; dy < boxSize && !hasParticle; dy++) {
-            const x = bx * boxSize + dx;
-            const y = by * boxSize + dy;
+            // 오프셋을 고려하여 좌표 역산
+            const x = bx * boxSize + dx - offset;
+            const y = by * boxSize + dy - offset;
             if (isInBounds(x, y) && grid[y][x]) {
               hasParticle = true;
             }
@@ -272,6 +277,7 @@ const DLACanvas = ({ grid, width = 400 }: { grid: Grid; width?: number }) => {
   return <canvas ref={canvasRef} width={width} height={width} className="rounded-lg shadow-xl" />;
 };
 
+// [버그 수정 완료] 박스 카운팅 연산 오프셋과 동기화되어 입자를 100% 가두는 캔버스 렌더러
 const BoxCountingCanvas = ({
   grid,
   boxSize,
@@ -296,16 +302,18 @@ const BoxCountingCanvas = ({
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, size, size);
 
-    let boxCount = 0;
-    const numBoxes = Math.floor(GRID_SIZE / boxSize);
+    // 알고리즘과 완벽 일치하도록 올림 처리 및 중앙 배치 오프셋 계산
+    const numBoxes = Math.ceil(GRID_SIZE / boxSize);
+    const totalGridWidth = numBoxes * boxSize;
+    const offset = Math.floor((totalGridWidth - GRID_SIZE) / 2);
 
     for (let bx = 0; bx < numBoxes; bx++) {
       for (let by = 0; by < numBoxes; by++) {
         let hasParticle = false;
         for (let dx = 0; dx < boxSize && !hasParticle; dx++) {
           for (let dy = 0; dy < boxSize && !hasParticle; dy++) {
-            const x = bx * boxSize + dx;
-            const y = by * boxSize + dy;
+            const x = bx * boxSize + dx - offset;
+            const y = by * boxSize + dy - offset;
             if (isInBounds(x, y) && grid[y][x]) {
               hasParticle = true;
             }
@@ -313,11 +321,21 @@ const BoxCountingCanvas = ({
         }
 
         if (hasParticle) {
-          boxCount++;
           ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
-          ctx.fillRect(bx * boxSize * cellSize, by * boxSize * cellSize, boxSize * cellSize, boxSize * cellSize);
+          // 오프셋 값을 픽셀 좌표 스케일로 환산하여 렌더링 시작점 보정
+          ctx.fillRect(
+            (bx * boxSize - offset) * cellSize, 
+            (by * boxSize - offset) * cellSize, 
+            boxSize * cellSize, 
+            boxSize * cellSize
+          );
           ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
-          ctx.strokeRect(bx * boxSize * cellSize, by * boxSize * cellSize, boxSize * cellSize, boxSize * cellSize);
+          ctx.strokeRect(
+            (bx * boxSize - offset) * cellSize, 
+            (by * boxSize - offset) * cellSize, 
+            boxSize * cellSize, 
+            boxSize * cellSize
+          );
         }
       }
     }
@@ -342,11 +360,6 @@ const RandomWalkStep = () => {
   const [particles, setParticles] = useState<Point[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const particlesRef = useRef<Point[]>([]);
-
-  useEffect(() => {
-    particlesRef.current = particles;
-  }, [particles]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -599,7 +612,7 @@ const RegressionGraphCanvas = ({
     ctx.setLineDash([]);
 
     // Data points
-    points.forEach((p, idx) => {
+    points.forEach((p) => {
       const cx = toCanvasX(p.x);
       const cy = toCanvasY(p.y);
 
@@ -741,7 +754,7 @@ const BoxCountingStep = () => {
                     <span className={isIncluded ? 'text-cyan-400' : ''}>ε = {size.toString().padStart(2)}</span>
                     <span>N(ε) = {boxData.counts[idx]}</span>
                     <span className={isIncluded ? 'text-cyan-400' : 'text-gray-600'}>
-                      {(Math.log(boxData.counts[idx]) / Math.log(1 / size)).toFixed(2)}
+                      {boxData.counts[idx] ? (Math.log(boxData.counts[idx]) / Math.log(1 / size)).toFixed(2) : '0.00'}
                     </span>
                   </div>
                 );
@@ -789,11 +802,6 @@ const BoxCountingStep = () => {
 const SpatialFillingStep = () => {
   const { grid, particleCount } = useDLASimulation();
 
-  const filledArea = particleCount;
-  const boundingArea = Math.max(particleCount * 2.5, 100);
-  const fillingRatio = boundingArea > 0 ? (filledArea / boundingArea) * 100 : 0;
-
-  const dlaRadius = Math.sqrt(particleCount / Math.PI) * 1.5;
   const solidRadius = Math.sqrt(particleCount / Math.PI);
 
   return (
