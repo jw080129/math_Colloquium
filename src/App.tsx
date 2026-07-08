@@ -163,7 +163,7 @@ const useDLASimulation = () => {
 
     const animate = (time: number) => {
       if (time - lastTime >= interval) {
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 12; i++) {
           runSimulation();
         }
         lastTime = time;
