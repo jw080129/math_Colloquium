@@ -182,16 +182,14 @@ const useDLASimulation = () => {
   return { grid, isRunning, particleCount, setIsRunning, reset };
 };
 
-// [버그 수정 완료] 올림(Math.ceil) 및 대칭 여백 오프셋을 적용한 박스 카운팅 알고리즘
+// 올림(Math.ceil) 및 대칭 여백 오프셋을 적용한 박스 카운팅 알고리즘
 const calculateBoxCounting = (grid: Grid): { sizes: number[]; counts: number[] } => {
   const sizes: number[] = [];
   const counts: number[] = [];
 
   for (let boxSize = 2; boxSize <= GRID_SIZE / 2; boxSize *= 2) {
     let count = 0;
-    // Math.ceil을 사용하여 GRID_SIZE 경계를 완전히 덮도록 격자 수 설정
     const numBoxes = Math.ceil(GRID_SIZE / boxSize);
-    // 격자를 화면 중앙에 정렬하기 위한 여백 오프셋 계산
     const totalGridWidth = numBoxes * boxSize;
     const offset = Math.floor((totalGridWidth - GRID_SIZE) / 2);
 
@@ -200,7 +198,6 @@ const calculateBoxCounting = (grid: Grid): { sizes: number[]; counts: number[] }
         let hasParticle = false;
         for (let dx = 0; dx < boxSize && !hasParticle; dx++) {
           for (let dy = 0; dy < boxSize && !hasParticle; dy++) {
-            // 오프셋을 고려하여 좌표 역산
             const x = bx * boxSize + dx - offset;
             const y = by * boxSize + dy - offset;
             if (isInBounds(x, y) && grid[y][x]) {
@@ -236,7 +233,7 @@ const linearRegression = (points: { x: number; y: number }[]): { slope: number; 
   const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
   const intercept = (sumY - slope * sumX) / n;
 
-  return { slope: Math.abs(slope), intercept };
+  return { slope, intercept };
 };
 
 // Canvas components
@@ -277,7 +274,7 @@ const DLACanvas = ({ grid, width = 400 }: { grid: Grid; width?: number }) => {
   return <canvas ref={canvasRef} width={width} height={width} className="rounded-lg shadow-xl" />;
 };
 
-// [버그 수정 완료] 박스 카운팅 연산 오프셋과 동기화되어 입자를 100% 가두는 캔버스 렌더러
+// 박스 카운팅 연산 오프셋과 동기화되어 입자를 100% 가두는 캔버스 렌더러
 const BoxCountingCanvas = ({
   grid,
   boxSize,
@@ -302,7 +299,6 @@ const BoxCountingCanvas = ({
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, size, size);
 
-    // 알고리즘과 완벽 일치하도록 올림 처리 및 중앙 배치 오프셋 계산
     const numBoxes = Math.ceil(GRID_SIZE / boxSize);
     const totalGridWidth = numBoxes * boxSize;
     const offset = Math.floor((totalGridWidth - GRID_SIZE) / 2);
@@ -322,7 +318,6 @@ const BoxCountingCanvas = ({
 
         if (hasParticle) {
           ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
-          // 오프셋 값을 픽셀 좌표 스케일로 환산하여 렌더링 시작점 보정
           ctx.fillRect(
             (bx * boxSize - offset) * cellSize, 
             (by * boxSize - offset) * cellSize, 
@@ -522,7 +517,7 @@ const DLAStep = () => {
   );
 };
 
-// Linear Regression Graph Canvas
+// Linear Regression Graph Canvas (부호 오류 전면 수정)
 const RegressionGraphCanvas = ({
   sizes,
   counts,
@@ -550,8 +545,9 @@ const RegressionGraphCanvas = ({
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, width, height);
 
+    // [수정] 부호 모순 차단을 위해 X축 데이터 매핑을 ln(1/s)에서 ln(s)로 변경 (양수 축 구현)
     const points = sizes.map((s, i) => ({
-      x: Math.log(1 / s),
+      x: Math.log(s), // ln(2) ≈ 0.69, ln(32) ≈ 3.47
       y: Math.log(counts[i]),
     }));
 
@@ -567,6 +563,7 @@ const RegressionGraphCanvas = ({
     const toCanvasX = (x: number) => padding + ((x - xMin) / (xMax - xMin)) * graphWidth;
     const toCanvasY = (y: number) => height - padding - ((y - yMin) / (yMax - yMin)) * graphHeight;
 
+    // Y축 격자선 및 수치 바인딩
     ctx.strokeStyle = '#374151';
     ctx.lineWidth = 1;
     for (let i = 0; i <= 5; i++) {
@@ -583,6 +580,7 @@ const RegressionGraphCanvas = ({
       ctx.fillText(yVal.toFixed(2), padding - 8, y + 4);
     }
 
+    // X축 격자선 및 수치 바인딩 ([수정] 양수 눈금 출력 보장)
     for (let i = 0; i <= 5; i++) {
       const x = padding + (i * graphWidth) / 5;
       ctx.beginPath();
@@ -597,7 +595,7 @@ const RegressionGraphCanvas = ({
       ctx.fillText(xVal.toFixed(2), x, height - padding + 16);
     }
 
-    // Regression line
+    // 회귀 추세선 렌더링 (우하향 형태)
     ctx.strokeStyle = '#f59e0b';
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
@@ -611,7 +609,7 @@ const RegressionGraphCanvas = ({
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Data points
+    // 플롯 데이터 포인트 찍기
     points.forEach((p) => {
       const cx = toCanvasX(p.x);
       const cy = toCanvasY(p.y);
@@ -626,10 +624,11 @@ const RegressionGraphCanvas = ({
       ctx.stroke();
     });
 
+    // 축 텍스트 라벨 마킹 ([수정] ln(ε) 로 레이블링 변경)
     ctx.fillStyle = '#ffffff';
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('ln(1/ε)', width / 2, height - 8);
+    ctx.fillText('ln(ε)', width / 2, height - 8);
 
     ctx.save();
     ctx.translate(12, height / 2);
@@ -637,9 +636,10 @@ const RegressionGraphCanvas = ({
     ctx.fillText('ln N(ε)', 0, 0);
     ctx.restore();
 
+    // 우측 상단 텍스트 출력 ([수정] 기울기 절대값을 취해 차원 D를 언제나 양수로 연산)
     ctx.fillStyle = '#f59e0b';
     ctx.font = 'bold 13px monospace';
-    ctx.fillText(`D = ${slope.toFixed(4)}`, width - padding - 50, padding - 10);
+    ctx.fillText(`D = ${Math.abs(slope).toFixed(4)}`, width - padding - 50, padding - 10);
   }, [sizes, counts, width, height]);
 
   return <canvas ref={canvasRef} width={width} height={height} className="rounded-lg shadow-xl" />;
@@ -672,12 +672,14 @@ const BoxCountingStep = () => {
     setFilteredData({ sizes: filteredSizes, counts: filteredCounts });
 
     if (filteredSizes.length >= 2) {
+      // [수정] 내부 가중치 연산도 ln(s) 기반 양수 데이터셋으로 동기화
       const points = filteredSizes.map((s, i) => ({
-        x: Math.log(1 / s),
+        x: Math.log(s),
         y: Math.log(filteredCounts[i]),
       }));
       const { slope } = linearRegression(points);
-      setFractalDim(slope);
+      // 우하향 직선이므로 기울기 수치는 음수 -> 절대값 처리를 통해 차원 수치는 양수로 보정
+      setFractalDim(Math.abs(slope));
     }
   }, [boxData, boxSize]);
 
@@ -722,7 +724,8 @@ const BoxCountingStep = () => {
         <div className="flex flex-col">
           <div className="bg-gray-800/80 rounded-xl p-4 mb-4">
             <h3 className="text-sm font-semibold text-white mb-2">선형 회귀 분석 그래프</h3>
-            <p className="text-gray-400 text-xs">ln N(ε) = D × ln(1/ε) + C</p>
+            {/* [수정] 변경된 축 방향에 부합하도록 음수 관계식 식별 표기 변경 */}
+            <p className="text-gray-400 text-xs">ln N(ε) = -D × ln(ε) + C</p>
           </div>
           <RegressionGraphCanvas sizes={filteredData.sizes} counts={filteredData.counts} width={350} height={280} />
         </div>
@@ -753,8 +756,9 @@ const BoxCountingStep = () => {
                   >
                     <span className={isIncluded ? 'text-cyan-400' : ''}>ε = {size.toString().padStart(2)}</span>
                     <span>N(ε) = {boxData.counts[idx]}</span>
+                    {/* [버그 완전 수정] 엉뚱한 기울기 계산 분수 코드를 지우고, 그래프와 연동되는 양수의 ln(ε) 값을 정확히 출력 */}
                     <span className={isIncluded ? 'text-cyan-400' : 'text-gray-600'}>
-                      {boxData.counts[idx] ? (Math.log(boxData.counts[idx]) / Math.log(1 / size)).toFixed(2) : '0.00'}
+                      ln(ε) = {Math.log(size).toFixed(2)}
                     </span>
                   </div>
                 );
