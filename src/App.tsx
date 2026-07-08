@@ -182,6 +182,7 @@ const useDLASimulation = () => {
   return { grid, isRunning, particleCount, setIsRunning, reset };
 };
 
+// 올림(Math.ceil) 및 대칭 여백 오프셋을 적용한 박스 카운팅 알고리즘
 const calculateBoxCounting = (grid: Grid): { sizes: number[]; counts: number[] } => {
   const sizes: number[] = [];
   const counts: number[] = [];
@@ -214,6 +215,7 @@ const calculateBoxCounting = (grid: Grid): { sizes: number[]; counts: number[] }
   return { sizes, counts };
 };
 
+// Linear regression
 const linearRegression = (points: { x: number; y: number }[]): { slope: number; intercept: number } => {
   const n = points.length;
   let sumX = 0,
@@ -272,6 +274,7 @@ const DLACanvas = ({ grid, width = 400 }: { grid: Grid; width?: number }) => {
   return <canvas ref={canvasRef} width={width} height={width} className="rounded-lg shadow-xl" />;
 };
 
+// 박스 카운팅 연산 오프셋과 동기화되어 입자를 100% 가두는 캔버스 렌더러
 const BoxCountingCanvas = ({
   grid,
   boxSize,
@@ -347,6 +350,174 @@ const BoxCountingCanvas = ({
   return <canvas ref={canvasRef} width={width} height={width} className="rounded-lg shadow-xl" />;
 };
 
+// Step Components
+const RandomWalkStep = () => {
+  const [particles, setParticles] = useState<Point[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (!isRunning) return;
+
+    const interval = setInterval(() => {
+      setParticles((prev) =>
+        prev.map((p) => {
+          const dir = getRandomDirection();
+          return { x: p.x + dir.x, y: p.y + dir.y };
+        })
+      );
+
+      if (Math.random() < 0.1) {
+        setParticles((prev) => [...prev, { x: CENTER, y: CENTER }]);
+      }
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [isRunning]);
+
+  useEffect(() => {
+    if (particles.length === 0) {
+      setParticles([
+        { x: CENTER, y: CENTER },
+        { x: CENTER + 10, y: CENTER },
+        { x: CENTER - 10, y: CENTER },
+      ]);
+    }
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const size = 400;
+    const cellSize = size / GRID_SIZE;
+
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.strokeStyle = '#1e3a5f';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= GRID_SIZE; i += 10) {
+      ctx.beginPath();
+      ctx.moveTo(i * cellSize, 0);
+      ctx.lineTo(i * cellSize, size);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, i * cellSize);
+      ctx.lineTo(size, i * cellSize);
+      ctx.stroke();
+    }
+
+    particles.forEach((p, idx) => {
+      const colors = ['#22d3ee', '#a855f7', '#f97316', '#22c55e'];
+      ctx.fillStyle = colors[idx % colors.length];
+      ctx.beginPath();
+      ctx.arc(p.x * cellSize, p.y * cellSize, cellSize * 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = colors[idx % colors.length] + '40';
+      ctx.beginPath();
+      ctx.arc(p.x * cellSize, p.y * cellSize, cellSize * 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }, [particles]);
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-bold text-white mb-4">무작위 걸음 시뮬레이션</h2>
+        <p className="text-gray-400">각 입자는 매 순간 독립적으로 1/4 확률로 동, 서, 남, 북 중 하나로 이동</p>
+      </div>
+
+      <div className="flex justify-center mb-6">
+        <canvas ref={canvasRef} width={400} height={400} className="rounded-lg shadow-xl" />
+      </div>
+
+      <div className="flex justify-center gap-4">
+        <button
+          onClick={() => setIsRunning(!isRunning)}
+          className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+            isRunning
+              ? 'bg-red-600 hover:bg-red-700 text-white'
+              : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+          }`}
+        >
+          {isRunning ? <Pause size={20} /> : <Play size={20} />}
+          {isRunning ? '정지' : '시작'}
+        </button>
+        <button
+          onClick={() => {
+            setIsRunning(false);
+            setParticles([
+              { x: CENTER, y: CENTER },
+              { x: CENTER + 10, y: CENTER },
+              { x: CENTER - 10, y: CENTER },
+            ]);
+          }}
+          className="flex items-center gap-2 px-6 py-3 rounded-lg bg-gray-600 hover:bg-gray-700 text-white font-medium transition-all"
+        >
+          <RotateCcw size={20} />
+          초기화
+        </button>
+      </div>
+
+      <div className="mt-6 p-4 bg-gray-800/50 rounded-lg">
+        <p className="text-gray-300 text-center">
+          입자 수: <span className="text-cyan-400 font-mono">{particles.length}</span>
+        </p>
+      </div>
+    </div>
+  );
+};
+
+const DLAStep = () => {
+  const { grid, isRunning, particleCount, setIsRunning, reset } = useDLASimulation();
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-bold text-white mb-4">DLA 응집 시뮬레이션</h2>
+        <p className="text-gray-400">무작위 걸음을 하는 입자들이 중심핵에 닿는 순간 결합하며 프랙탈 구조 형성</p>
+      </div>
+
+      <div className="flex justify-center mb-6">
+        <DLACanvas grid={grid} />
+      </div>
+
+      <div className="flex justify-center gap-4">
+        <button
+          onClick={() => setIsRunning(!isRunning)}
+          className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+            isRunning
+              ? 'bg-red-600 hover:bg-red-700 text-white'
+              : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+          }`}
+        >
+          {isRunning ? <Pause size={20} /> : <Play size={20} />}
+          {isRunning ? '정지' : '시작'}
+        </button>
+        <button
+          onClick={reset}
+          className="flex items-center gap-2 px-6 py-3 rounded-lg bg-gray-600 hover:bg-gray-700 text-white font-medium transition-all"
+        >
+          <RotateCcw size={20} />
+          초기화
+        </button>
+      </div>
+
+      <div className="mt-6 p-4 bg-gray-800/50 rounded-lg">
+        <p className="text-gray-300 text-center">
+          응집 입자 수: <span className="text-cyan-400 font-mono">{particleCount}</span>
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// Linear Regression Graph Canvas (부호 오류 전면 수정)
 // [원상복구] X축을 원래 이론 수식인 ln(1/ε)로 철저히 유지 (음수 축 좌표 보존)
 const RegressionGraphCanvas = ({
   sizes,
@@ -410,7 +581,7 @@ const RegressionGraphCanvas = ({
       ctx.fillText(yVal.toFixed(2), padding - 8, y + 4);
     }
 
-    // X축 격자선 ([이론식 유지] 축 눈금에 정상적으로 음수 범위가 표시됨)
+    // X축 격자선 (축 눈금에 정상적으로 음수 범위가 표시됨)
     for (let i = 0; i <= 5; i++) {
       const x = padding + (i * graphWidth) / 5;
       ctx.beginPath();
@@ -553,7 +724,6 @@ const BoxCountingStep = () => {
         <div className="flex flex-col">
           <div className="bg-gray-800/80 rounded-xl p-4 mb-4">
             <h3 className="text-sm font-semibold text-white mb-2">선형 회귀 분석 그래프</h3>
-            {/* [이론식 유지] */}
             <p className="text-gray-400 text-xs">ln N(ε) = D × ln(1/ε) + C</p>
           </div>
           <RegressionGraphCanvas sizes={filteredData.sizes} counts={filteredData.counts} width={350} height={280} />
@@ -585,7 +755,7 @@ const BoxCountingStep = () => {
                   >
                     <span className={isIncluded ? 'text-cyan-400' : ''}>ε = {size.toString().padStart(2)}</span>
                     <span>N(ε) = {boxData.counts[idx]}</span>
-                    {/* [핵심 수정 수정] 버그나 모순이 없도록 데이터 테이블의 3번째 열만 깔끔하게 양수의 ln(ε) 값으로 표기되도록 수정! */}
+                    {/* [데이터 테이블 수정] 축과 연동되면서 우측에 깔끔하게 표기되는 양수의 ln(ε) 값 */}
                     <span className={isIncluded ? 'text-cyan-400' : 'text-gray-600'}>
                       ln(ε) = {Math.log(size).toFixed(2)}
                     </span>
